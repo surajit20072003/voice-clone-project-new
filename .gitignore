@@ -1,0 +1,74 @@
+# ======================
+# Python & Virtual Env
+# ======================
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pkl
+*.so
+*.egg-info/
+*.egg
+venv*/
+venv/
+venv310/
+xtts_venv/
+
+# ======================
+# Django
+# ======================
+db.sqlite3
+*.sqlite3
+.env
+.env.local
+.env.*.local
+staticfiles/
+media/
+logs/
+
+# ======================
+# Models & Checkpoints
+# ======================
+*.pth
+*.pt
+*.bin
+*.onnx
+*.ckpt
+*.safetensors
+
+# HuggingFace & Transformers Cache
+huggingface/
+~/.cache/huggingface/
+.cache/
+transformers_cache/
+
+# Ollama cache/models
+~/.ollama/
+ollama_models/
+
+# ======================
+# Generated Files
+# ======================
+*.log
+*.tmp
+*.zip
+*.tar
+*.gz
+*.mp4
+*.wav
+*.webm
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+
+# Requirements file 
+requirements.txt
+requirements_simple.txt 
+
+# Migrations
+*/migrations/
+wav2lip_api/authentication/migrations/
+wav2lip_api/chat/migrations/
+wav2lip_api/core/migrations/

@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>LipSync Generator</title>
+</head>
+<body>
+  <h2>Generate Avtar Video</h2>
+  <form id="lipSyncForm" enctype="multipart/form-data">
+    <label>Upload Video: <input type="file" name="video" required></label><br><br>
+    <label>Text: <input type="text" name="text" required></label><br><br>
+    <label>Speaker ID (optional): <input type="text" name="speaker_id" placeholder="e.g., my_speaker_id"></label><br><br>
+    <label>Language: 
+      <select name="lang">
+        <option value="en">English</option>
+        <option value="hi">Hindi</option>
+      </select>
+    </label><br><br>
+    <button type="submit">Generate</button>
+  </form>
+
+  <div id="status"></div>
+  <div id="videoContainer"></div>
+
+  <script>
+    const form = document.getElementById('lipSyncForm');
+    const statusDiv = document.getElementById('status');
+    const videoContainer = document.getElementById('videoContainer');
+
+    // This function gets the CSRF token from the cookies.
+    const getCsrfToken = () => {
+        return document.cookie.split('; ').find(row => row.startsWith('csrftoken='))?.split('=')[1];
+    };
+
+    // This function handles the display of the final video.
+    const showVideo = (videoBlob) => {
+        const videoUrl = URL.createObjectURL(videoBlob);
+        statusDiv.textContent = 'Video generated successfully!';
+        videoContainer.innerHTML = `
+            <video width="640" height="360" controls>
+              <source src="${videoUrl}" type="video/mp4">
+              Your browser does not support the video tag.
+            </video>
+            <br>
+            <a href="${videoUrl}" download="generated_video.mp4">Download Video</a>
+        `;
+    };
+
+    // The main event listener for form submission.
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+
+      const formData = new FormData(form);
+      const csrftoken = getCsrfToken();
+
+      statusDiv.textContent = 'Generating video, please wait...';
+      videoContainer.innerHTML = '';
+
+      try {
+        // Send a single POST request to the backend for all languages.
+        const response = await fetch('/api/generate/', {
+          method: 'POST',
+          body: formData,
+          headers: {
+            'X-CSRFToken': csrftoken
+          }
+        });
+
+        if (response.ok) {
+          // If the response is successful, display the video directly.
+          const videoBlob = await response.blob();
+          showVideo(videoBlob);
+        } else {
+          // Handle any errors from the server.
+          const errorText = await response.text();
+          statusDiv.textContent = `Error: ${errorText || response.statusText}`;
+        }
+      } catch (error) {
+        // Handle network or other unexpected errors.
+        statusDiv.textContent = `An unexpected error occurred: ${error.message}`;
+        console.error('Fetch error:', error);
+      }
+    });
+  </script>
+</body>
+</html>
