@@ -46,7 +46,6 @@ INSTALLED_APPS = [
     'authentication',
     'core',
     'admin_finetune',
-    'celery',
 ]
 AUTH_USER_MODEL = 'authentication.User'
 MIDDLEWARE = [
@@ -143,7 +142,7 @@ REST_FRAMEWORK = {
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated',
+        'rest_framework.permissions.AllowAny',
     ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 10,
@@ -202,7 +201,3 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'UTC'
 
-# Yeh Celery ko batata hai ki tasks ko kis app mein dhoondhna hai
-CELERY_IMPORTS = [
-    'admin_finetune.tasks',
-]

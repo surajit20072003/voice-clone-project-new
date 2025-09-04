@@ -1,48 +1,92 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>LipSync Generator</title>
+  <style>
+    body { font-family: sans-serif; margin: 20px; background-color: #f4f4f4; }
+    h2 { text-align: center; color: #333; }
+    form { max-width: 600px; margin: 20px auto; padding: 20px; background-color: #fff; border: 1px solid #ccc; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+    label { display: block; margin-bottom: 10px; color: #555; }
+    input[type="file"], input[type="text"], select { width: 100%; padding: 10px; box-sizing: border-box; margin-bottom: 15px; border: 1px solid #ddd; border-radius: 4px; }
+    button { padding: 10px 20px; background-color: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; transition: background-color 0.3s ease; }
+    button:hover { background-color: #0056b3; }
+    #status { margin-top: 20px; text-align: center; font-weight: bold; color: #333; }
+    #videoContainer { margin-top: 20px; text-align: center; }
+    video { max-width: 100%; height: auto; border: 1px solid #ccc; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+    .spinner {
+      border: 4px solid rgba(0, 0, 0, 0.1);
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      border-left-color: #007bff;
+      animation: spin 1s ease infinite;
+      display: inline-block;
+      vertical-align: middle;
+      margin-right: 10px;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .error-message {
+      color: red;
+      font-weight: bold;
+      margin-top: 10px;
+    }
+  </style>
 </head>
 <body>
-  <h2>Generate Avtar Video</h2>
+  <h2>Generate Avatar Video</h2>
   <form id="lipSyncForm" enctype="multipart/form-data">
-    <label>Upload Video: <input type="file" name="video" required></label><br><br>
-    <label>Text: <input type="text" name="text" required></label><br><br>
-    <label>Speaker ID (optional): <input type="text" name="speaker_id" placeholder="e.g., my_speaker_id"></label><br><br>
+    <label>Upload Video: <input type="file" name="video" required></label>
+    <label>Text: <input type="text" name="text" required></label>
+    <label>Speaker ID (optional): <input type="text" name="speaker_id" placeholder="e.g., my_speaker_id"></label>
     <label>Language: 
       <select name="lang">
         <option value="en">English</option>
         <option value="hi">Hindi</option>
       </select>
-    </label><br><br>
+    </label>
     <button type="submit">Generate</button>
   </form>
 
   <div id="status"></div>
   <div id="videoContainer"></div>
+  <div id="errorMessage" class="error-message"></div>
 
   <script>
     const form = document.getElementById('lipSyncForm');
     const statusDiv = document.getElementById('status');
     const videoContainer = document.getElementById('videoContainer');
+    const errorMessageDiv = document.getElementById('errorMessage');
+    let pollingInterval = null;
 
     // This function gets the CSRF token from the cookies.
     const getCsrfToken = () => {
         return document.cookie.split('; ').find(row => row.startsWith('csrftoken='))?.split('=')[1];
     };
 
-    // This function handles the display of the final video.
-    const showVideo = (videoBlob) => {
-        const videoUrl = URL.createObjectURL(videoBlob);
-        statusDiv.textContent = 'Video generated successfully!';
+    // This function shows the final video on the page.
+    const showVideo = (videoUrl) => {
+        statusDiv.innerHTML = 'Video generated successfully!';
         videoContainer.innerHTML = `
-            <video width="640" height="360" controls>
+            <video width="640" height="360" controls autoplay>
               <source src="${videoUrl}" type="video/mp4">
               Your browser does not support the video tag.
             </video>
             <br>
-            <a href="${videoUrl}" download="generated_video.mp4">Download Video</a>
+            <a href="${videoUrl}" download="generated_video.mp4" style="display: inline-block; margin-top: 10px;">Download Video</a>
         `;
+    };
+
+    // This function handles displaying error messages.
+    const showError = (message) => {
+        statusDiv.innerHTML = '';
+        videoContainer.innerHTML = '';
+        errorMessageDiv.textContent = `Error: ${message}`;
+        console.error('An error occurred:', message);
     };
 
     // The main event listener for form submission.
@@ -51,12 +95,26 @@
 
       const formData = new FormData(form);
       const csrftoken = getCsrfToken();
+      
+      const videoFile = formData.get('video');
+      const text = formData.get('text');
 
-      statusDiv.textContent = 'Generating video, please wait...';
+      if (!videoFile || videoFile.name === '' || !text || text.trim() === '') {
+          showError('Please upload a video and enter some text.');
+          return;
+      }
+
+      statusDiv.innerHTML = `<div class="spinner"></div> Generating video, please wait...`;
       videoContainer.innerHTML = '';
+      errorMessageDiv.textContent = ''; // Clear previous errors
+
+      // Clear any previous polling interval to prevent multiple tasks
+      if (pollingInterval) {
+          clearInterval(pollingInterval);
+      }
 
       try {
-        // Send a single POST request to the backend for all languages.
+        // Step 1: Send request to start the generation task.
         const response = await fetch('/api/generate/', {
           method: 'POST',
           body: formData,
@@ -65,19 +123,53 @@
           }
         });
 
-        if (response.ok) {
-          // If the response is successful, display the video directly.
-          const videoBlob = await response.blob();
-          showVideo(videoBlob);
-        } else {
-          // Handle any errors from the server.
-          const errorText = await response.text();
-          statusDiv.textContent = `Error: ${errorText || response.statusText}`;
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || response.statusText);
         }
+
+        const data = await response.json();
+        const taskId = data.task_id; // Your backend should return a JSON object with a task_id.
+        if (!taskId) {
+            throw new Error('No task ID received from the server.');
+        }
+
+        // Step 2: Start polling for the task status.
+        pollingInterval = setInterval(async () => {
+            try {
+                const statusResponse = await fetch(`/api/status/${taskId}`);
+                
+                if (!statusResponse.ok) {
+                    console.warn(`Polling failed for task ${taskId}. Server returned status: ${statusResponse.status}`);
+                    return;
+                }
+
+                const statusData = await statusResponse.json();
+                console.log('Polling status:', statusData); // Log the status for debugging
+                
+                if (statusData.status === 'COMPLETE') {
+                    clearInterval(pollingInterval); // Stop polling.
+                    if (statusData.result_url) {
+                        showVideo(statusData.result_url);
+                    } else {
+                        showError('Video generation completed but no video URL was returned.');
+                    }
+                } else if (statusData.status === 'FAILED') {
+                    clearInterval(pollingInterval); // Stop polling.
+                    showError(statusData.error_message || 'Video generation failed.');
+                } else {
+                    // Update the status message with progress meta if available
+                    const statusText = (statusData.meta && statusData.meta.status) ? statusData.meta.status : (statusData.status || 'In Progress');
+                    statusDiv.innerHTML = `<div class="spinner"></div> ${statusText}`;
+                }
+            } catch (error) {
+                clearInterval(pollingInterval);
+                showError(error.message);
+            }
+        }, 2000); // Poll every 2 seconds.
+
       } catch (error) {
-        // Handle network or other unexpected errors.
-        statusDiv.textContent = `An unexpected error occurred: ${error.message}`;
-        console.error('Fetch error:', error);
+        showError(error.message);
       }
     });
   </script>
